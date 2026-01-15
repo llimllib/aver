@@ -3,13 +3,24 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 	"time"
 
 	"aver/pkg/actions"
 )
+
+// Exit codes
+const (
+	exitOK       = 0
+	exitOutdated = 1
+	exitError    = 2
+)
+
+func fatal(msg string) {
+	fmt.Fprintln(os.Stderr, "error:", msg)
+	os.Exit(exitError)
+}
 
 const usageText = `aver: GitHub Actions version checker
 
@@ -25,8 +36,11 @@ Options:
   --quiet        Suppress progress indicator
 
 Check GitHub Actions versions in the current project.
-Exits with status 0 if all actions are up to date,
-or status 1 with a list of outdated actions.
+
+Exit codes:
+  0  All actions are up to date
+  1  Outdated actions found
+  2  Error occurred (e.g., network failure, invalid workflow)
 
 Examples:
   aver                Check actions in current project
@@ -287,12 +301,12 @@ func main() {
 
 	dir, err := os.Getwd()
 	if err != nil {
-		log.Fatal(err)
+		fatal(err.Error())
 	}
 
 	actionRefs, err := actions.FindActionReferences(dir)
 	if err != nil {
-		log.Fatal(err)
+		fatal(err.Error())
 	}
 
 	opts := actions.CheckOptions{
@@ -315,7 +329,7 @@ func main() {
 		spin.finish()
 	}
 	if err != nil {
-		log.Fatal(err)
+		fatal(err.Error())
 	}
 
 	// Print warnings to stderr
@@ -326,15 +340,15 @@ func main() {
 	if upToDate {
 		if jsonOutput {
 			if err := printJSON(result); err != nil {
-				log.Fatal(err)
+				fatal(err.Error())
 			}
 		}
-		os.Exit(0)
+		os.Exit(exitOK)
 	}
 
 	if jsonOutput {
 		if err := printJSON(result); err != nil {
-			log.Fatal(err)
+			fatal(err.Error())
 		}
 	} else {
 		if len(result.Outdated) > 0 {
@@ -349,5 +363,5 @@ func main() {
 			printSHATable(result.SHAPinned)
 		}
 	}
-	os.Exit(1)
+	os.Exit(exitOutdated)
 }

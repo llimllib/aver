@@ -1,0 +1,2 @@
+- progress spinner
+- ensure actions are cached and not re-checked
