@@ -302,10 +302,12 @@ func CheckActionVersions(actions []ActionReference, opts CheckOptions) (bool, Ch
 
 // semver represents a parsed semantic version
 type semver struct {
-	Major int
-	Minor int
-	Patch int
-	Raw   string
+	Major    int
+	Minor    int
+	Patch    int
+	Raw      string
+	HasMinor bool // true if minor version was explicitly specified
+	HasPatch bool // true if patch version was explicitly specified
 }
 
 // parseSemver parses a version string into a semver struct
@@ -322,9 +324,11 @@ func parseSemver(version string) *semver {
 	sv.Major, _ = strconv.Atoi(matches[1])
 	if matches[2] != "" {
 		sv.Minor, _ = strconv.Atoi(matches[2])
+		sv.HasMinor = true
 	}
 	if matches[3] != "" {
 		sv.Patch, _ = strconv.Atoi(matches[3])
+		sv.HasPatch = true
 	}
 
 	return sv
@@ -397,10 +401,31 @@ func findLatestVersion(tags []GitHubTag, currentVersion string, ignoreMinor bool
 		return ""
 	}
 
-	// Find the latest version overall
-	latest := candidates[0]
-	if latest.compare(currentSV) > 0 {
-		return latest.Raw
+	// Find the latest version based on the precision of the current version
+	// If user specified v6, only report if there's a v7+
+	// If user specified v6.1, only report if there's a v6.2+ or v7+
+	// If user specified v6.1.0, report any newer version
+	for _, candidate := range candidates {
+		if candidate.Major > currentSV.Major {
+			// Newer major version - always report
+			return candidate.Raw
+		}
+		if !currentSV.HasMinor {
+			// User only specified major (e.g., v6), skip minor/patch updates
+			continue
+		}
+		if candidate.Major == currentSV.Major && candidate.Minor > currentSV.Minor {
+			// Same major, newer minor
+			return candidate.Raw
+		}
+		if !currentSV.HasPatch {
+			// User only specified major.minor (e.g., v6.1), skip patch updates
+			continue
+		}
+		if candidate.Major == currentSV.Major && candidate.Minor == currentSV.Minor && candidate.Patch > currentSV.Patch {
+			// Same major.minor, newer patch
+			return candidate.Raw
+		}
 	}
 
 	return ""

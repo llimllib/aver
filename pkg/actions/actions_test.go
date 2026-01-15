@@ -11,11 +11,11 @@ func TestParseSemver(t *testing.T) {
 		input    string
 		expected *semver
 	}{
-		{"v1", &semver{Major: 1, Minor: 0, Patch: 0, Raw: "v1"}},
-		{"v1.2", &semver{Major: 1, Minor: 2, Patch: 0, Raw: "v1.2"}},
-		{"v1.2.3", &semver{Major: 1, Minor: 2, Patch: 3, Raw: "v1.2.3"}},
-		{"1.2.3", &semver{Major: 1, Minor: 2, Patch: 3, Raw: "1.2.3"}},
-		{"v10.20.30", &semver{Major: 10, Minor: 20, Patch: 30, Raw: "v10.20.30"}},
+		{"v1", &semver{Major: 1, Minor: 0, Patch: 0, Raw: "v1", HasMinor: false, HasPatch: false}},
+		{"v1.2", &semver{Major: 1, Minor: 2, Patch: 0, Raw: "v1.2", HasMinor: true, HasPatch: false}},
+		{"v1.2.3", &semver{Major: 1, Minor: 2, Patch: 3, Raw: "v1.2.3", HasMinor: true, HasPatch: true}},
+		{"1.2.3", &semver{Major: 1, Minor: 2, Patch: 3, Raw: "1.2.3", HasMinor: true, HasPatch: true}},
+		{"v10.20.30", &semver{Major: 10, Minor: 20, Patch: 30, Raw: "v10.20.30", HasMinor: true, HasPatch: true}},
 		{"invalid", nil},
 		{"v1.2.3.4", nil},
 		{"vABC", nil},
@@ -38,7 +38,9 @@ func TestParseSemver(t *testing.T) {
 			if result.Major != tt.expected.Major ||
 				result.Minor != tt.expected.Minor ||
 				result.Patch != tt.expected.Patch ||
-				result.Raw != tt.expected.Raw {
+				result.Raw != tt.expected.Raw ||
+				result.HasMinor != tt.expected.HasMinor ||
+				result.HasPatch != tt.expected.HasPatch {
 				t.Errorf("expected %+v, got %+v", tt.expected, result)
 			}
 		})
@@ -149,10 +151,12 @@ func TestVersionsEqual(t *testing.T) {
 func TestFindLatestVersion(t *testing.T) {
 	tags := []GitHubTag{
 		{Name: "v1.0.0"},
+		{Name: "v1.0.1"},
 		{Name: "v1.1.0"},
 		{Name: "v1.2.0"},
 		{Name: "v2.0.0"},
 		{Name: "v2.1.0"},
+		{Name: "v2.1.1"},
 		{Name: "v1"},
 		{Name: "v2"},
 	}
@@ -163,11 +167,25 @@ func TestFindLatestVersion(t *testing.T) {
 		ignoreMinor bool
 		expected    string
 	}{
-		{"find latest from v1.0.0", "v1.0.0", false, "v2.1.0"},
-		{"find latest from v2.1.0", "v2.1.0", false, ""},
-		{"find latest from v2.0.0", "v2.0.0", false, "v2.1.0"},
+		// Major-only versions should only report newer majors
+		{"major only v1 -> v2 available", "v1", false, "v2.1.1"},
+		{"major only v2 -> nothing newer", "v2", false, ""},
+
+		// Major.minor versions should report newer minors (same major) or newer majors
+		{"v1.0 -> v1.2 available", "v1.0", false, "v2.1.1"},
+		{"v1.1 -> v1.2 available", "v1.1", false, "v2.1.1"},
+		{"v2.0 -> v2.1 available", "v2.0", false, "v2.1.1"},
+		{"v2.1 -> nothing newer", "v2.1", false, ""},
+
+		// Full versions should report any newer version
+		{"v1.0.0 -> v2.1.1 available", "v1.0.0", false, "v2.1.1"},
+		{"v2.1.0 -> v2.1.1 available", "v2.1.0", false, "v2.1.1"},
+		{"v2.1.1 -> nothing newer", "v2.1.1", false, ""},
+
+		// ignoreMinor flag tests
 		{"ignore minor from v1", "v1", true, "v2"},
 		{"ignore minor from v2", "v2", true, ""},
+		{"ignore minor from v1.0.0", "v1.0.0", true, "v2"},
 		{"ignore minor already latest", "v2.1.0", true, ""},
 	}
 

@@ -1,6 +1,6 @@
 # aver
 
-A GitHub Actions version checker. Scans your workflow files and reports outdated actions.
+A GitHub **A**ctions **ver**sion checker. Scans your workflow files and reports outdated actions.
 
 ## Installation
 
@@ -20,13 +20,14 @@ Run `aver` in any directory within a Git repository:
 
 ```bash
 $ aver
-Action            Current  Latest
-----------------  -------  ------
-actions/checkout  v4       v6
-actions/setup-go  v4       v5
+File                        Action            Current  Latest
+--------------------------  ----------------  -------  ------
+.github/workflows/lint.yml  actions/checkout  v5       v6.0.2
+.github/workflows/lint.yml  actions/setup-go  v5       v6.2.0
 ```
 
 The tool will:
+
 1. Find the project root (directory containing `.git` or `.github`)
 2. Scan all workflow files in `.github/workflows/*.yml` and `.github/workflows/*.yaml`
 3. Check each action's version against GitHub's latest major version tag
@@ -44,6 +45,7 @@ aver version  Print version
 An action is considered up to date if its major version matches the latest major version tag available on GitHub.
 
 For example:
+
 - `actions/checkout@v4` is outdated if `v5` or `v6` tags exist
 - `actions/checkout@v6` is up to date if `v6` is the highest major version
 - `actions/checkout@v6.1.0` is up to date (major version 6 matches)
