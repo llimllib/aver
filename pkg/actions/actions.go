@@ -185,6 +185,7 @@ func extractActionUses(obj interface{}) []ActionReference {
 type CheckOptions struct {
 	IgnoreSHA   bool
 	IgnoreMinor bool
+	OnProgress  func(action string) // Called when checking each action
 }
 
 // CheckResult contains the results of checking action versions
@@ -228,6 +229,11 @@ func CheckActionVersions(actions []ActionReference, opts CheckOptions) (bool, Ch
 		// Skip if we already know this repo is inaccessible
 		if skippedRepos[repo] {
 			continue
+		}
+
+		// Report progress
+		if opts.OnProgress != nil {
+			opts.OnProgress(action.Name)
 		}
 
 		// Check if this is a SHA-pinned action

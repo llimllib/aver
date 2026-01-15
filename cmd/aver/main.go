@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"aver/pkg/actions"
 )
@@ -21,6 +22,7 @@ Options:
   --json         Output results as JSON
   --ignore-sha   Ignore SHA-pinned actions
   --ignore-minor Only check major version differences
+  --quiet        Suppress progress indicator
 
 Check GitHub Actions versions in the current project.
 Exits with status 0 if all actions are up to date,
@@ -31,6 +33,7 @@ Examples:
   aver --json         Output as JSON
   aver --ignore-sha   Ignore SHA-pinned actions
   aver --ignore-minor Only report major version updates
+  aver --quiet        Run without progress indicator
   aver help           Show this help message`
 
 func printHelp() {
@@ -199,6 +202,71 @@ func hasFlag(args []string, flags ...string) bool {
 	return false
 }
 
+// spinner displays a spinning progress indicator
+type spinner struct {
+	frames  []string
+	stop    chan struct{}
+	stopped chan struct{}
+	action  chan string
+	current string
+}
+
+func newSpinner() *spinner {
+	return &spinner{
+		frames:  []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"},
+		stop:    make(chan struct{}),
+		stopped: make(chan struct{}),
+		action:  make(chan string),
+	}
+}
+
+func (s *spinner) start() {
+	go func() {
+		defer close(s.stopped)
+		i := 0
+		for {
+			select {
+			case <-s.stop:
+				// Clear the spinner
+				fmt.Fprint(os.Stderr, "\r\033[K")
+				return
+			case name := <-s.action:
+				s.current = name
+			default:
+				msg := "Checking actions..."
+				if s.current != "" {
+					msg = fmt.Sprintf("Checking %s...", s.current)
+				}
+				fmt.Fprintf(os.Stderr, "\r\033[K%s %s", s.frames[i%len(s.frames)], msg)
+				i++
+				time.Sleep(80 * time.Millisecond)
+			}
+		}
+	}()
+}
+
+func (s *spinner) update(action string) {
+	select {
+	case s.action <- action:
+	default:
+		// Don't block if channel is full
+	}
+}
+
+func (s *spinner) finish() {
+	close(s.stop)
+	<-s.stopped
+}
+
+// isTerminal returns true if the file is a terminal
+func isTerminal(f *os.File) bool {
+	stat, err := f.Stat()
+	if err != nil {
+		return false
+	}
+	return (stat.Mode() & os.ModeCharDevice) != 0
+}
+
 func main() {
 	args := os.Args[1:]
 
@@ -215,6 +283,7 @@ func main() {
 	jsonOutput := hasFlag(args, "--json", "-json", "json")
 	ignoreSHA := hasFlag(args, "--ignore-sha", "-ignore-sha", "ignore-sha")
 	ignoreMinor := hasFlag(args, "--ignore-minor", "-ignore-minor", "ignore-minor")
+	quiet := hasFlag(args, "--quiet", "-quiet", "quiet", "-q")
 
 	dir, err := os.Getwd()
 	if err != nil {
@@ -231,7 +300,20 @@ func main() {
 		IgnoreMinor: ignoreMinor,
 	}
 
+	// Start spinner unless quiet mode, JSON output, or non-TTY stderr
+	var spin *spinner
+	if !quiet && !jsonOutput && isTerminal(os.Stderr) {
+		spin = newSpinner()
+		opts.OnProgress = spin.update
+		spin.start()
+	}
+
 	upToDate, result, err := actions.CheckActionVersions(actionRefs, opts)
+
+	// Stop spinner before any output
+	if spin != nil {
+		spin.finish()
+	}
 	if err != nil {
 		log.Fatal(err)
 	}
