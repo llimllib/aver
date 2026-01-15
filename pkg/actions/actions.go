@@ -183,7 +183,8 @@ func extractActionUses(obj interface{}) []ActionReference {
 
 // CheckOptions configures the behavior of CheckActionVersions
 type CheckOptions struct {
-	IgnoreSHA bool
+	IgnoreSHA   bool
+	IgnoreMinor bool
 }
 
 // CheckResult contains the results of checking action versions
@@ -193,11 +194,32 @@ type CheckResult struct {
 	Warnings  []string
 }
 
+// tagCache stores fetched tags per repo
+type tagCache struct {
+	tags map[string][]GitHubTag
+}
+
+func newTagCache() *tagCache {
+	return &tagCache{tags: make(map[string][]GitHubTag)}
+}
+
+func (tc *tagCache) getTags(repo string) ([]GitHubTag, error) {
+	if tags, ok := tc.tags[repo]; ok {
+		return tags, nil
+	}
+
+	tags, err := fetchTags(repo)
+	if err != nil {
+		return nil, err
+	}
+
+	tc.tags[repo] = tags
+	return tags, nil
+}
+
 func CheckActionVersions(actions []ActionReference, opts CheckOptions) (bool, CheckResult, error) {
 	result := CheckResult{}
-
-	// Cache latest versions to avoid duplicate API calls (keyed by repo)
-	latestVersionCache := make(map[string]string)
+	cache := newTagCache()
 	skippedRepos := make(map[string]bool)
 
 	for _, action := range actions {
@@ -241,24 +263,24 @@ func CheckActionVersions(actions []ActionReference, opts CheckOptions) (bool, Ch
 			continue
 		}
 
-		latestVersion, ok := latestVersionCache[repo]
-		if !ok {
-			var err error
-			latestVersion, err = fetchLatestMajorVersion(action)
-			if err != nil {
-				var notAccessible *ErrRepoNotAccessible
-				if errors.As(err, &notAccessible) {
-					result.Warnings = append(result.Warnings,
-						fmt.Sprintf("skipping %s: repository not accessible", action.Name))
-					skippedRepos[repo] = true
-					continue
-				}
-				return false, result, fmt.Errorf("failed to check %s: %w", action.Name, err)
+		tags, err := cache.getTags(repo)
+		if err != nil {
+			var notAccessible *ErrRepoNotAccessible
+			if errors.As(err, &notAccessible) {
+				result.Warnings = append(result.Warnings,
+					fmt.Sprintf("skipping %s: repository not accessible", action.Name))
+				skippedRepos[repo] = true
+				continue
 			}
-			latestVersionCache[repo] = latestVersion
+			return false, result, fmt.Errorf("failed to check %s: %w", action.Name, err)
 		}
 
-		if !isUpToDate(action.Version, latestVersion) {
+		latestVersion := findLatestVersion(tags, action.Version, opts.IgnoreMinor)
+		if latestVersion == "" {
+			continue // No comparable version found
+		}
+
+		if !versionsEqual(action.Version, latestVersion) {
 			result.Outdated = append(result.Outdated, OutdatedAction{
 				Name:           action.Name,
 				CurrentVersion: action.Version,
@@ -270,6 +292,122 @@ func CheckActionVersions(actions []ActionReference, opts CheckOptions) (bool, Ch
 
 	allUpToDate := len(result.Outdated) == 0 && len(result.SHAPinned) == 0
 	return allUpToDate, result, nil
+}
+
+// semver represents a parsed semantic version
+type semver struct {
+	Major int
+	Minor int
+	Patch int
+	Raw   string
+}
+
+// parseSemver parses a version string into a semver struct
+// Supports: v1, v1.2, v1.2.3
+func parseSemver(version string) *semver {
+	re := regexp.MustCompile(`^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?$`)
+	matches := re.FindStringSubmatch(version)
+	if matches == nil {
+		return nil
+	}
+
+	sv := &semver{Raw: version}
+
+	sv.Major, _ = strconv.Atoi(matches[1])
+	if matches[2] != "" {
+		sv.Minor, _ = strconv.Atoi(matches[2])
+	}
+	if matches[3] != "" {
+		sv.Patch, _ = strconv.Atoi(matches[3])
+	}
+
+	return sv
+}
+
+// compare returns -1 if s < other, 0 if equal, 1 if s > other
+func (s *semver) compare(other *semver) int {
+	if s.Major != other.Major {
+		if s.Major < other.Major {
+			return -1
+		}
+		return 1
+	}
+	if s.Minor != other.Minor {
+		if s.Minor < other.Minor {
+			return -1
+		}
+		return 1
+	}
+	if s.Patch != other.Patch {
+		if s.Patch < other.Patch {
+			return -1
+		}
+		return 1
+	}
+	return 0
+}
+
+// findLatestVersion finds the latest version tag
+// If ignoreMinor is true, only compares major versions
+// Otherwise, finds the latest version overall
+func findLatestVersion(tags []GitHubTag, currentVersion string, ignoreMinor bool) string {
+	currentSV := parseSemver(currentVersion)
+	if currentSV == nil {
+		return "" // Can't parse current version
+	}
+
+	var candidates []*semver
+	for _, tag := range tags {
+		sv := parseSemver(tag.Name)
+		if sv == nil {
+			continue
+		}
+		candidates = append(candidates, sv)
+	}
+
+	if len(candidates) == 0 {
+		return ""
+	}
+
+	// Sort candidates by version descending
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].compare(candidates[j]) > 0
+	})
+
+	if ignoreMinor {
+		// Find the latest major version tag (just vN format)
+		var latestMajor *semver
+		for _, sv := range candidates {
+			// Only consider pure major version tags (v1, v2, etc.)
+			if sv.Minor == 0 && sv.Patch == 0 && strings.HasPrefix(sv.Raw, "v") && !strings.Contains(sv.Raw, ".") {
+				if latestMajor == nil || sv.Major > latestMajor.Major {
+					latestMajor = sv
+				}
+			}
+		}
+		if latestMajor != nil && latestMajor.Major > currentSV.Major {
+			return latestMajor.Raw
+		}
+		return ""
+	}
+
+	// Find the latest version overall
+	latest := candidates[0]
+	if latest.compare(currentSV) > 0 {
+		return latest.Raw
+	}
+
+	return ""
+}
+
+// versionsEqual checks if two version strings represent the same version
+func versionsEqual(v1, v2 string) bool {
+	sv1 := parseSemver(v1)
+	sv2 := parseSemver(v2)
+	if sv1 == nil || sv2 == nil {
+		return v1 == v2
+	}
+	return sv1.compare(sv2) == 0
 }
 
 // isSHA returns true if the version string looks like a git SHA
@@ -428,21 +566,17 @@ func repoFromAction(name string) string {
 	return name
 }
 
-// fetchLatestMajorVersion fetches all tags from GitHub and returns the highest major version tag
-func fetchLatestMajorVersion(action ActionReference) (string, error) {
-	repo := repoFromAction(action.Name)
-
-	// GitHub API URL for tags
+// fetchTags fetches all tags from GitHub for a repository
+func fetchTags(repo string) ([]GitHubTag, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/tags?per_page=100", repo)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
 
-	// Use GITHUB_TOKEN if available for higher rate limits
 	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
 		req.Header.Set("Authorization", "token "+token)
 	}
@@ -450,84 +584,21 @@ func fetchLatestMajorVersion(action ActionReference) (string, error) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusForbidden {
-		return "", &ErrRepoNotAccessible{Repo: repo, Status: resp.StatusCode}
+		return nil, &ErrRepoNotAccessible{Repo: repo, Status: resp.StatusCode}
 	}
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
 	}
 
 	var tags []GitHubTag
 	if err := json.NewDecoder(resp.Body).Decode(&tags); err != nil {
-		return "", err
+		return nil, err
 	}
 
-	// Find the highest major version tag (e.g., v6, v5, etc.)
-	latestMajor := findLatestMajorVersionTag(tags)
-	if latestMajor == "" {
-		return action.Version, nil // No version tags found, assume current is fine
-	}
-
-	return latestMajor, nil
-}
-
-// versionTagRegex matches tags like v1, v2, v10, etc. (major version only)
-var versionTagRegex = regexp.MustCompile(`^v(\d+)$`)
-
-// findLatestMajorVersionTag finds the highest major version tag (v1, v2, etc.)
-func findLatestMajorVersionTag(tags []GitHubTag) string {
-	var majorVersions []int
-
-	for _, tag := range tags {
-		matches := versionTagRegex.FindStringSubmatch(tag.Name)
-		if matches != nil {
-			major, err := strconv.Atoi(matches[1])
-			if err == nil {
-				majorVersions = append(majorVersions, major)
-			}
-		}
-	}
-
-	if len(majorVersions) == 0 {
-		return ""
-	}
-
-	sort.Sort(sort.Reverse(sort.IntSlice(majorVersions)))
-	return fmt.Sprintf("v%d", majorVersions[0])
-}
-
-// isUpToDate checks if the current version is up to date with the latest
-// For major versions (v1, v2), compares major numbers
-func isUpToDate(current, latest string) bool {
-	currentMajor := extractMajorVersion(current)
-	latestMajor := extractMajorVersion(latest)
-
-	// If we can't extract major versions, assume up to date
-	if currentMajor == -1 || latestMajor == -1 {
-		return true
-	}
-
-	return currentMajor >= latestMajor
-}
-
-// extractMajorVersion extracts the major version number from a version string
-// Returns -1 if not a valid major version format
-func extractMajorVersion(version string) int {
-	// Match v1, v2, v10, v1.2.3, etc.
-	re := regexp.MustCompile(`^v(\d+)`)
-	matches := re.FindStringSubmatch(version)
-	if matches == nil {
-		return -1
-	}
-
-	major, err := strconv.Atoi(matches[1])
-	if err != nil {
-		return -1
-	}
-
-	return major
+	return tags, nil
 }

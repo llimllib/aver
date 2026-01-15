@@ -16,20 +16,22 @@ Usage:
   aver [options]
 
 Options:
-  help         Print this help message
-  version      Print the version of aver
-  --json       Output results as JSON
-  --ignore-sha Ignore SHA-pinned actions
+  help           Print this help message
+  version        Print the version of aver
+  --json         Output results as JSON
+  --ignore-sha   Ignore SHA-pinned actions
+  --ignore-minor Only check major version differences
 
 Check GitHub Actions versions in the current project.
 Exits with status 0 if all actions are up to date,
 or status 1 with a list of outdated actions.
 
 Examples:
-  aver              Check actions in current project
-  aver --json       Output as JSON
-  aver --ignore-sha Ignore SHA-pinned actions
-  aver help         Show this help message`
+  aver                Check actions in current project
+  aver --json         Output as JSON
+  aver --ignore-sha   Ignore SHA-pinned actions
+  aver --ignore-minor Only report major version updates
+  aver help           Show this help message`
 
 func printHelp() {
 	fmt.Println(usageText)
@@ -212,6 +214,7 @@ func main() {
 
 	jsonOutput := hasFlag(args, "--json", "-json", "json")
 	ignoreSHA := hasFlag(args, "--ignore-sha", "-ignore-sha", "ignore-sha")
+	ignoreMinor := hasFlag(args, "--ignore-minor", "-ignore-minor", "ignore-minor")
 
 	dir, err := os.Getwd()
 	if err != nil {
@@ -224,7 +227,8 @@ func main() {
 	}
 
 	opts := actions.CheckOptions{
-		IgnoreSHA: ignoreSHA,
+		IgnoreSHA:   ignoreSHA,
+		IgnoreMinor: ignoreMinor,
 	}
 
 	upToDate, result, err := actions.CheckActionVersions(actionRefs, opts)
