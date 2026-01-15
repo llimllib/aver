@@ -21,10 +21,10 @@ type ActionReference struct {
 }
 
 type OutdatedAction struct {
-	Name           string
-	CurrentVersion string
-	LatestVersion  string
-	File           string
+	File           string `json:"file"`
+	Name           string `json:"action"`
+	CurrentVersion string `json:"current"`
+	LatestVersion  string `json:"latest"`
 }
 
 // GitHubTag represents a tag from the GitHub API

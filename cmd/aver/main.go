@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -17,6 +18,7 @@ Usage:
 Options:
   help     Print this help message
   version  Print the version of aver
+  --json   Output results as JSON
 
 Check GitHub Actions versions in the current project.
 Exits with status 0 if all actions are up to date,
@@ -24,6 +26,7 @@ or status 1 with a list of outdated actions.
 
 Examples:
   aver          Check actions in current project
+  aver --json   Output as JSON
   aver help     Show this help message`
 
 func printHelp() {
@@ -83,18 +86,40 @@ func printTable(outdated []actions.OutdatedAction) {
 	}
 }
 
-func main() {
-	// Handle help and version flags
-	if len(os.Args) > 1 {
-		switch os.Args[1] {
-		case "help", "--help", "-h":
-			printHelp()
-			os.Exit(0)
-		case "version", "--version", "-v":
-			printVersion()
-			os.Exit(0)
+func printJSON(outdated []actions.OutdatedAction) error {
+	output, err := json.MarshalIndent(outdated, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(output))
+	return nil
+}
+
+func hasFlag(args []string, flags ...string) bool {
+	for _, arg := range args {
+		for _, flag := range flags {
+			if arg == flag {
+				return true
+			}
 		}
 	}
+	return false
+}
+
+func main() {
+	args := os.Args[1:]
+
+	// Handle help and version flags
+	if hasFlag(args, "help", "--help", "-h") {
+		printHelp()
+		os.Exit(0)
+	}
+	if hasFlag(args, "version", "--version", "-v") {
+		printVersion()
+		os.Exit(0)
+	}
+
+	jsonOutput := hasFlag(args, "--json", "-json", "json")
 
 	dir, err := os.Getwd()
 	if err != nil {
@@ -112,9 +137,18 @@ func main() {
 	}
 
 	if upToDate {
+		if jsonOutput {
+			fmt.Println("[]")
+		}
 		os.Exit(0)
 	}
 
-	printTable(outdatedActions)
+	if jsonOutput {
+		if err := printJSON(outdatedActions); err != nil {
+			log.Fatal(err)
+		}
+	} else {
+		printTable(outdatedActions)
+	}
 	os.Exit(1)
 }
