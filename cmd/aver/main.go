@@ -10,6 +10,13 @@ import (
 	"aver/pkg/actions"
 )
 
+// Version info set by goreleaser ldflags
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 // Exit codes
 const (
 	exitOK       = 0
@@ -55,7 +62,7 @@ func printHelp() {
 }
 
 func printVersion() {
-	fmt.Println("aver version 0.1.0")
+	fmt.Printf("aver version %s (commit: %s, built: %s)\n", version, commit, date)
 }
 
 func printOutdatedTable(outdated []actions.OutdatedAction) {

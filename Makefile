@@ -1,4 +1,4 @@
-.PHONY: lint test install clean
+.PHONY: lint test install clean release
 
 GO = /Users/llimllib/.local/share/mise/installs/go/1.25.5/bin/go
 GOLANGCI_LINT = golangci-lint
@@ -24,6 +24,9 @@ install: $(BINARY)
 
 clean:
 	rm -f $(BINARY)
+
+release:
+	@./scripts/release.sh
 
 # Default target
 all: $(BINARY)
