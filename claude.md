@@ -11,7 +11,7 @@ make lint   # Run golangci-lint
 make clean  # Remove binary
 ```
 
-Uses Go 1.25: `/Users/llimllib/.local/share/mise/installs/go/1.25.5/bin/go`
+Uses Go 1.25+
 
 ## Before Committing
 

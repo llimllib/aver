@@ -1,6 +1,6 @@
 .PHONY: lint test install clean release
 
-GO = /Users/llimllib/.local/share/mise/installs/go/1.25.5/bin/go
+GO ?= go
 GOLANGCI_LINT = golangci-lint
 
 # Find all Go source files
