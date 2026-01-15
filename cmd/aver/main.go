@@ -131,9 +131,14 @@ func main() {
 		log.Fatal(err)
 	}
 
-	upToDate, outdatedActions, err := actions.CheckActionVersions(actionRefs)
+	upToDate, result, err := actions.CheckActionVersions(actionRefs)
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	// Print warnings to stderr
+	for _, warning := range result.Warnings {
+		fmt.Fprintln(os.Stderr, "warning:", warning)
 	}
 
 	if upToDate {
@@ -144,11 +149,11 @@ func main() {
 	}
 
 	if jsonOutput {
-		if err := printJSON(outdatedActions); err != nil {
+		if err := printJSON(result.Outdated); err != nil {
 			log.Fatal(err)
 		}
 	} else {
-		printTable(outdatedActions)
+		printTable(result.Outdated)
 	}
 	os.Exit(1)
 }

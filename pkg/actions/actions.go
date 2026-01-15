@@ -2,6 +2,7 @@ package actions
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -30,6 +31,16 @@ type OutdatedAction struct {
 // GitHubTag represents a tag from the GitHub API
 type GitHubTag struct {
 	Name string `json:"name"`
+}
+
+// ErrRepoNotAccessible is returned when a repository cannot be accessed
+type ErrRepoNotAccessible struct {
+	Repo   string
+	Status int
+}
+
+func (e *ErrRepoNotAccessible) Error() string {
+	return fmt.Sprintf("repository %s not accessible (status %d)", e.Repo, e.Status)
 }
 
 func FindProjectRoot(startDir string) (string, error) {
@@ -143,26 +154,46 @@ func extractActionUses(obj interface{}) []ActionReference {
 	return refs
 }
 
-func CheckActionVersions(actions []ActionReference) (bool, []OutdatedAction, error) {
-	outdatedActions := []OutdatedAction{}
+// CheckResult contains the results of checking action versions
+type CheckResult struct {
+	Outdated []OutdatedAction
+	Warnings []string
+}
+
+func CheckActionVersions(actions []ActionReference) (bool, CheckResult, error) {
+	result := CheckResult{}
 
 	// Cache latest versions to avoid duplicate API calls (keyed by repo)
 	latestVersionCache := make(map[string]string)
+	skippedRepos := make(map[string]bool)
 
 	for _, action := range actions {
 		repo := repoFromAction(action.Name)
+
+		// Skip if we already know this repo is inaccessible
+		if skippedRepos[repo] {
+			continue
+		}
+
 		latestVersion, ok := latestVersionCache[repo]
 		if !ok {
 			var err error
 			latestVersion, err = fetchLatestMajorVersion(action)
 			if err != nil {
-				return false, nil, fmt.Errorf("failed to check %s: %w", action.Name, err)
+				var notAccessible *ErrRepoNotAccessible
+				if errors.As(err, &notAccessible) {
+					result.Warnings = append(result.Warnings,
+						fmt.Sprintf("skipping %s: repository not accessible", action.Name))
+					skippedRepos[repo] = true
+					continue
+				}
+				return false, result, fmt.Errorf("failed to check %s: %w", action.Name, err)
 			}
 			latestVersionCache[repo] = latestVersion
 		}
 
 		if !isUpToDate(action.Version, latestVersion) {
-			outdatedActions = append(outdatedActions, OutdatedAction{
+			result.Outdated = append(result.Outdated, OutdatedAction{
 				Name:           action.Name,
 				CurrentVersion: action.Version,
 				LatestVersion:  latestVersion,
@@ -171,7 +202,7 @@ func CheckActionVersions(actions []ActionReference) (bool, []OutdatedAction, err
 		}
 	}
 
-	return len(outdatedActions) == 0, outdatedActions, nil
+	return len(result.Outdated) == 0, result, nil
 }
 
 // repoFromAction extracts the owner/repo from an action name
@@ -210,6 +241,9 @@ func fetchLatestMajorVersion(action ActionReference) (string, error) {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusForbidden {
+		return "", &ErrRepoNotAccessible{Repo: repo, Status: resp.StatusCode}
+	}
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
 	}
