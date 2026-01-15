@@ -21,6 +21,8 @@ Always run tests and lint before committing:
 make test && make lint
 ```
 
+Don't commit with any lint errors
+
 ## Project Structure
 
 ```
