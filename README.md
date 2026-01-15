@@ -42,14 +42,21 @@ aver version  Print version
 
 ## What counts as "up to date"?
 
-An action is considered up to date if its major version matches the latest major version tag available on GitHub.
+Aver respects the precision of your version specifier:
+
+| You specify | Aver reports outdated if |
+|-------------|--------------------------|
+| `v6` | A newer major version exists (e.g., `v7`) |
+| `v6.1` | A newer minor or major version exists (e.g., `v6.2` or `v7`) |
+| `v6.1.0` | Any newer version exists (e.g., `v6.1.1`, `v6.2.0`, or `v7`) |
 
 For example:
 
-- `actions/checkout@v4` is outdated if `v5` or `v6` tags exist
-- `actions/checkout@v6` is up to date if `v6` is the highest major version
-- `actions/checkout@v6.1.0` is up to date (major version 6 matches)
-- SHA references (e.g., `actions/checkout@a1b2c3d`) are assumed up to date (cannot compare)
+- `actions/checkout@v6` is up to date even if `v6.0.2` exists (you asked for v6, you have v6)
+- `actions/checkout@v6.0` would be outdated if `v6.1` exists
+- `actions/checkout@v6.0.0` would be outdated if `v6.0.1` exists
+
+SHA-pinned actions (e.g., `@a1b2c3d`) report how many commits behind the default branch they are, unless `--ignore-sha` is passed.
 
 ## GitHub API Rate Limits
 
