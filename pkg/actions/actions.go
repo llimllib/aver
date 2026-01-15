@@ -108,7 +108,7 @@ func FindActionReferences(startDir string) ([]ActionReference, error) {
 			return nil
 		}
 
-		if !(strings.HasSuffix(path, ".yml") || strings.HasSuffix(path, ".yaml")) {
+		if !strings.HasSuffix(path, ".yml") && !strings.HasSuffix(path, ".yaml") {
 			return nil
 		}
 
@@ -448,7 +448,7 @@ func isSHA(version string) bool {
 		return false
 	}
 	for _, c := range version {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
 			return false
 		}
 	}
@@ -506,7 +506,7 @@ func getDefaultBranch(repo string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusForbidden {
 		return "", &ErrRepoNotAccessible{Repo: repo, Status: resp.StatusCode}
@@ -541,7 +541,7 @@ func getBranchHead(repo, branch string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
@@ -573,7 +573,7 @@ func compareCommits(repo, baseSHA, head string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return 0, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
@@ -617,7 +617,7 @@ func fetchTags(repo string) ([]GitHubTag, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusForbidden {
 		return nil, &ErrRepoNotAccessible{Repo: repo, Status: resp.StatusCode}
