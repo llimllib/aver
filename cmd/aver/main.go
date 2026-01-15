@@ -36,7 +36,7 @@ func printVersion() {
 
 func printTable(outdated []actions.OutdatedAction) {
 	// Column headers
-	headers := []string{"Action", "Current", "Latest"}
+	headers := []string{"File", "Action", "Current", "Latest"}
 
 	// Calculate column widths
 	widths := make([]int, len(headers))
@@ -45,35 +45,41 @@ func printTable(outdated []actions.OutdatedAction) {
 	}
 
 	for _, a := range outdated {
-		if len(a.Name) > widths[0] {
-			widths[0] = len(a.Name)
+		if len(a.File) > widths[0] {
+			widths[0] = len(a.File)
 		}
-		if len(a.CurrentVersion) > widths[1] {
-			widths[1] = len(a.CurrentVersion)
+		if len(a.Name) > widths[1] {
+			widths[1] = len(a.Name)
 		}
-		if len(a.LatestVersion) > widths[2] {
-			widths[2] = len(a.LatestVersion)
+		if len(a.CurrentVersion) > widths[2] {
+			widths[2] = len(a.CurrentVersion)
+		}
+		if len(a.LatestVersion) > widths[3] {
+			widths[3] = len(a.LatestVersion)
 		}
 	}
 
 	// Print header
-	fmt.Printf("%-*s  %-*s  %-*s\n",
+	fmt.Printf("%-*s  %-*s  %-*s  %-*s\n",
 		widths[0], headers[0],
 		widths[1], headers[1],
-		widths[2], headers[2])
+		widths[2], headers[2],
+		widths[3], headers[3])
 
 	// Print separator
-	fmt.Printf("%s  %s  %s\n",
+	fmt.Printf("%s  %s  %s  %s\n",
 		strings.Repeat("-", widths[0]),
 		strings.Repeat("-", widths[1]),
-		strings.Repeat("-", widths[2]))
+		strings.Repeat("-", widths[2]),
+		strings.Repeat("-", widths[3]))
 
 	// Print rows
 	for _, a := range outdated {
-		fmt.Printf("%-*s  %-*s  %-*s\n",
-			widths[0], a.Name,
-			widths[1], a.CurrentVersion,
-			widths[2], a.LatestVersion)
+		fmt.Printf("%-*s  %-*s  %-*s  %-*s\n",
+			widths[0], a.File,
+			widths[1], a.Name,
+			widths[2], a.CurrentVersion,
+			widths[3], a.LatestVersion)
 	}
 }
 

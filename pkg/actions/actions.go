@@ -17,12 +17,14 @@ import (
 type ActionReference struct {
 	Name    string
 	Version string
+	File    string
 }
 
 type OutdatedAction struct {
 	Name           string
 	CurrentVersion string
 	LatestVersion  string
+	File           string
 }
 
 // GitHubTag represents a tag from the GitHub API
@@ -82,12 +84,22 @@ func FindActionReferences(startDir string) ([]ActionReference, error) {
 			return err
 		}
 
+		// Get relative path from project root
+		relPath, err := filepath.Rel(projectRoot, path)
+		if err != nil {
+			relPath = filepath.Base(path)
+		}
+
 		refs := extractActionUses(workflow)
 		for _, ref := range refs {
-			key := ref.Name + "@" + ref.Version
+			key := ref.Name + "@" + ref.Version + "@" + relPath
 			if !seen[key] {
 				seen[key] = true
-				actionRefs = append(actionRefs, ref)
+				actionRefs = append(actionRefs, ActionReference{
+					Name:    ref.Name,
+					Version: ref.Version,
+					File:    relPath,
+				})
 			}
 		}
 
@@ -134,10 +146,18 @@ func extractActionUses(obj interface{}) []ActionReference {
 func CheckActionVersions(actions []ActionReference) (bool, []OutdatedAction, error) {
 	outdatedActions := []OutdatedAction{}
 
+	// Cache latest versions to avoid duplicate API calls
+	latestVersionCache := make(map[string]string)
+
 	for _, action := range actions {
-		latestVersion, err := fetchLatestMajorVersion(action)
-		if err != nil {
-			return false, nil, fmt.Errorf("failed to check %s: %w", action.Name, err)
+		latestVersion, ok := latestVersionCache[action.Name]
+		if !ok {
+			var err error
+			latestVersion, err = fetchLatestMajorVersion(action)
+			if err != nil {
+				return false, nil, fmt.Errorf("failed to check %s: %w", action.Name, err)
+			}
+			latestVersionCache[action.Name] = latestVersion
 		}
 
 		if !isUpToDate(action.Version, latestVersion) {
@@ -145,6 +165,7 @@ func CheckActionVersions(actions []ActionReference) (bool, []OutdatedAction, err
 				Name:           action.Name,
 				CurrentVersion: action.Version,
 				LatestVersion:  latestVersion,
+				File:           action.File,
 			})
 		}
 	}
