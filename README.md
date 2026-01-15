@@ -1,6 +1,6 @@
 # aver
 
-A GitHub **A**ctions **ver**sion checker. Scans your workflow files and reports outdated actions.
+A GitHub **A**ctions **ver**sion checker. Scans your GitHub actions workflow files and reports outdated versions.
 
 ## Installation
 
@@ -64,6 +64,40 @@ For example:
 - `actions/checkout@v6.0.0` would be outdated if `v6.0.1` exists
 
 SHA-pinned actions (e.g., `@a1b2c3d`) report how many commits behind the default branch they are, unless `--ignore-sha` is passed.
+
+## Using with AI Coding Agents
+
+Aver works well with AI coding agents like [Claude Code](https://claude.ai/code) and [Pi](https://github.com/badlogic/pi-coding-agent) to prevent them from adding outdated GitHub Actions.
+
+### Option 1: Add to CLAUDE.md / AGENTS.md
+
+Add this to your project's `CLAUDE.md` or `AGENTS.md`:
+
+```markdown
+## GitHub Actions
+
+When creating or modifying `.github/workflows/` files:
+
+1. Run `aver` to check for outdated actions before committing
+2. Always use the latest major version for any new actions
+3. If aver reports outdated actions, update them to the versions shown
+```
+
+### Option 2: Install the Skill
+
+For [Pi](https://github.com/badlogic/pi-coding-agent) or [Claude Code](https://claude.ai/code), install the included skill for automatic version checking guidance:
+
+```bash
+# For Pi
+cp -r skill/github-actions-version-check ~/.pi/agent/skills/
+
+# For Claude Code
+cp -r skill/github-actions-version-check ~/.claude/skills/
+```
+
+The agent will automatically load the skill when working with GitHub Actions workflow files.
+
+**I have not actually used this**, please let me know how it works for you and if there are any changes you'd like to make.
 
 ## GitHub API Rate Limits
 

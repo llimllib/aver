@@ -23,6 +23,12 @@ make test && make lint
 
 Don't commit with any lint errors
 
+Run `aver` to check our own GitHub Actions are up to date:
+
+```bash
+aver
+```
+
 ## Project Structure
 
 ```
@@ -54,6 +60,10 @@ pkg/actions/         # Core logic
   - `GET /repos/{owner}/{repo}` - default branch
   - `GET /repos/{owner}/{repo}/git/ref/heads/{branch}` - branch HEAD
   - `GET /repos/{owner}/{repo}/compare/{base}...{head}` - commit comparison
+
+## Skill
+
+The `skill/github-actions-version-check/` directory contains a skill for AI coding agents. When adding new features or flags to aver, update the skill's SKILL.md to document them.
 
 ## Commits
 
