@@ -146,18 +146,19 @@ func extractActionUses(obj interface{}) []ActionReference {
 func CheckActionVersions(actions []ActionReference) (bool, []OutdatedAction, error) {
 	outdatedActions := []OutdatedAction{}
 
-	// Cache latest versions to avoid duplicate API calls
+	// Cache latest versions to avoid duplicate API calls (keyed by repo)
 	latestVersionCache := make(map[string]string)
 
 	for _, action := range actions {
-		latestVersion, ok := latestVersionCache[action.Name]
+		repo := repoFromAction(action.Name)
+		latestVersion, ok := latestVersionCache[repo]
 		if !ok {
 			var err error
 			latestVersion, err = fetchLatestMajorVersion(action)
 			if err != nil {
 				return false, nil, fmt.Errorf("failed to check %s: %w", action.Name, err)
 			}
-			latestVersionCache[action.Name] = latestVersion
+			latestVersionCache[repo] = latestVersion
 		}
 
 		if !isUpToDate(action.Version, latestVersion) {
@@ -173,10 +174,22 @@ func CheckActionVersions(actions []ActionReference) (bool, []OutdatedAction, err
 	return len(outdatedActions) == 0, outdatedActions, nil
 }
 
+// repoFromAction extracts the owner/repo from an action name
+// e.g., "actions/cache/restore" -> "actions/cache"
+func repoFromAction(name string) string {
+	parts := strings.Split(name, "/")
+	if len(parts) >= 2 {
+		return parts[0] + "/" + parts[1]
+	}
+	return name
+}
+
 // fetchLatestMajorVersion fetches all tags from GitHub and returns the highest major version tag
 func fetchLatestMajorVersion(action ActionReference) (string, error) {
+	repo := repoFromAction(action.Name)
+
 	// GitHub API URL for tags
-	url := fmt.Sprintf("https://api.github.com/repos/%s/tags?per_page=100", action.Name)
+	url := fmt.Sprintf("https://api.github.com/repos/%s/tags?per_page=100", repo)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
