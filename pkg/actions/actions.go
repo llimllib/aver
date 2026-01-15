@@ -28,9 +28,36 @@ type OutdatedAction struct {
 	LatestVersion  string `json:"latest"`
 }
 
+type SHAPinnedAction struct {
+	File          string `json:"file"`
+	Name          string `json:"action"`
+	CurrentSHA    string `json:"current_sha"`
+	LatestSHA     string `json:"latest_sha"`
+	CommitsBehind int    `json:"commits_behind"`
+}
+
 // GitHubTag represents a tag from the GitHub API
 type GitHubTag struct {
 	Name string `json:"name"`
+}
+
+// GitHubCompare represents the compare API response
+type GitHubCompare struct {
+	AheadBy  int    `json:"ahead_by"`
+	BehindBy int    `json:"behind_by"`
+	Status   string `json:"status"`
+}
+
+// GitHubRepo represents repository info from the API
+type GitHubRepo struct {
+	DefaultBranch string `json:"default_branch"`
+}
+
+// GitHubRef represents a git reference from the API
+type GitHubRef struct {
+	Object struct {
+		SHA string `json:"sha"`
+	} `json:"object"`
 }
 
 // ErrRepoNotAccessible is returned when a repository cannot be accessed
@@ -154,13 +181,19 @@ func extractActionUses(obj interface{}) []ActionReference {
 	return refs
 }
 
-// CheckResult contains the results of checking action versions
-type CheckResult struct {
-	Outdated []OutdatedAction
-	Warnings []string
+// CheckOptions configures the behavior of CheckActionVersions
+type CheckOptions struct {
+	IgnoreSHA bool
 }
 
-func CheckActionVersions(actions []ActionReference) (bool, CheckResult, error) {
+// CheckResult contains the results of checking action versions
+type CheckResult struct {
+	Outdated  []OutdatedAction
+	SHAPinned []SHAPinnedAction
+	Warnings  []string
+}
+
+func CheckActionVersions(actions []ActionReference, opts CheckOptions) (bool, CheckResult, error) {
 	result := CheckResult{}
 
 	// Cache latest versions to avoid duplicate API calls (keyed by repo)
@@ -172,6 +205,39 @@ func CheckActionVersions(actions []ActionReference) (bool, CheckResult, error) {
 
 		// Skip if we already know this repo is inaccessible
 		if skippedRepos[repo] {
+			continue
+		}
+
+		// Check if this is a SHA-pinned action
+		if isSHA(action.Version) {
+			if opts.IgnoreSHA {
+				continue
+			}
+
+			// Check how far behind the SHA is
+			shaInfo, err := checkSHAStatus(repo, action.Version)
+			if err != nil {
+				var notAccessible *ErrRepoNotAccessible
+				if errors.As(err, &notAccessible) {
+					result.Warnings = append(result.Warnings,
+						fmt.Sprintf("skipping %s: repository not accessible", action.Name))
+					skippedRepos[repo] = true
+					continue
+				}
+				result.Warnings = append(result.Warnings,
+					fmt.Sprintf("skipping %s: %v", action.Name, err))
+				continue
+			}
+
+			if shaInfo.CommitsBehind > 0 {
+				result.SHAPinned = append(result.SHAPinned, SHAPinnedAction{
+					File:          action.File,
+					Name:          action.Name,
+					CurrentSHA:    action.Version,
+					LatestSHA:     shaInfo.LatestSHA,
+					CommitsBehind: shaInfo.CommitsBehind,
+				})
+			}
 			continue
 		}
 
@@ -202,7 +268,154 @@ func CheckActionVersions(actions []ActionReference) (bool, CheckResult, error) {
 		}
 	}
 
-	return len(result.Outdated) == 0, result, nil
+	allUpToDate := len(result.Outdated) == 0 && len(result.SHAPinned) == 0
+	return allUpToDate, result, nil
+}
+
+// isSHA returns true if the version string looks like a git SHA
+func isSHA(version string) bool {
+	// SHA commits are 40 hex characters (full) or 7+ hex characters (short)
+	if len(version) < 7 {
+		return false
+	}
+	for _, c := range version {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
+
+type shaStatus struct {
+	LatestSHA     string
+	CommitsBehind int
+}
+
+// checkSHAStatus checks how far behind a SHA-pinned action is from the default branch
+func checkSHAStatus(repo, sha string) (*shaStatus, error) {
+	// First, get the default branch
+	defaultBranch, err := getDefaultBranch(repo)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get the latest SHA on the default branch
+	latestSHA, err := getBranchHead(repo, defaultBranch)
+	if err != nil {
+		return nil, err
+	}
+
+	// If already at latest, no need to compare
+	if strings.HasPrefix(latestSHA, sha) || strings.HasPrefix(sha, latestSHA) {
+		return &shaStatus{LatestSHA: latestSHA, CommitsBehind: 0}, nil
+	}
+
+	// Compare the commits
+	behindBy, err := compareCommits(repo, sha, defaultBranch)
+	if err != nil {
+		return nil, err
+	}
+
+	return &shaStatus{LatestSHA: latestSHA, CommitsBehind: behindBy}, nil
+}
+
+func getDefaultBranch(repo string) (string, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s", repo)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", err
+	}
+
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+		req.Header.Set("Authorization", "token "+token)
+	}
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusForbidden {
+		return "", &ErrRepoNotAccessible{Repo: repo, Status: resp.StatusCode}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	var repoInfo GitHubRepo
+	if err := json.NewDecoder(resp.Body).Decode(&repoInfo); err != nil {
+		return "", err
+	}
+
+	return repoInfo.DefaultBranch, nil
+}
+
+func getBranchHead(repo, branch string) (string, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/git/ref/heads/%s", repo, branch)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", err
+	}
+
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+		req.Header.Set("Authorization", "token "+token)
+	}
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	var ref GitHubRef
+	if err := json.NewDecoder(resp.Body).Decode(&ref); err != nil {
+		return "", err
+	}
+
+	return ref.Object.SHA, nil
+}
+
+func compareCommits(repo, baseSHA, head string) (int, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/compare/%s...%s", repo, baseSHA, head)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return 0, err
+	}
+
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+		req.Header.Set("Authorization", "token "+token)
+	}
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	var compare GitHubCompare
+	if err := json.NewDecoder(resp.Body).Decode(&compare); err != nil {
+		return 0, err
+	}
+
+	return compare.AheadBy, nil
 }
 
 // repoFromAction extracts the owner/repo from an action name
@@ -289,7 +502,6 @@ func findLatestMajorVersionTag(tags []GitHubTag) string {
 
 // isUpToDate checks if the current version is up to date with the latest
 // For major versions (v1, v2), compares major numbers
-// For SHA refs or other formats, returns true (can't compare)
 func isUpToDate(current, latest string) bool {
 	currentMajor := extractMajorVersion(current)
 	latestMajor := extractMajorVersion(latest)
