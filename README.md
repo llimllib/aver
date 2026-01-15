@@ -82,6 +82,7 @@ make          # Build the binary
 make test     # Run tests
 make lint     # Run golangci-lint
 make clean    # Remove binary
+make release  # Make a release
 ```
 
 ## License
