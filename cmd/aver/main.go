@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"aver/pkg/actions"
 )
@@ -31,6 +32,49 @@ func printHelp() {
 
 func printVersion() {
 	fmt.Println("aver version 0.1.0")
+}
+
+func printTable(outdated []actions.OutdatedAction) {
+	// Column headers
+	headers := []string{"Action", "Current", "Latest"}
+
+	// Calculate column widths
+	widths := make([]int, len(headers))
+	for i, h := range headers {
+		widths[i] = len(h)
+	}
+
+	for _, a := range outdated {
+		if len(a.Name) > widths[0] {
+			widths[0] = len(a.Name)
+		}
+		if len(a.CurrentVersion) > widths[1] {
+			widths[1] = len(a.CurrentVersion)
+		}
+		if len(a.LatestVersion) > widths[2] {
+			widths[2] = len(a.LatestVersion)
+		}
+	}
+
+	// Print header
+	fmt.Printf("%-*s  %-*s  %-*s\n",
+		widths[0], headers[0],
+		widths[1], headers[1],
+		widths[2], headers[2])
+
+	// Print separator
+	fmt.Printf("%s  %s  %s\n",
+		strings.Repeat("-", widths[0]),
+		strings.Repeat("-", widths[1]),
+		strings.Repeat("-", widths[2]))
+
+	// Print rows
+	for _, a := range outdated {
+		fmt.Printf("%-*s  %-*s  %-*s\n",
+			widths[0], a.Name,
+			widths[1], a.CurrentVersion,
+			widths[2], a.LatestVersion)
+	}
 }
 
 func main() {
@@ -65,12 +109,6 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Print outdated actions table
-	fmt.Println("Action | Current Version | Latest Version")
-	fmt.Println("-------|-----------------|----------------")
-	for _, action := range outdatedActions {
-		fmt.Printf("%s | %s | %s\n", action.Name, action.CurrentVersion, action.LatestVersion)
-	}
-
+	printTable(outdatedActions)
 	os.Exit(1)
 }
