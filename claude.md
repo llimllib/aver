@@ -13,6 +13,14 @@ make clean  # Remove binary
 
 Uses Go 1.25: `/Users/llimllib/.local/share/mise/installs/go/1.25.5/bin/go`
 
+## Before Committing
+
+Always run tests and lint before committing:
+
+```bash
+make test && make lint
+```
+
 ## Project Structure
 
 ```
