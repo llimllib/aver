@@ -72,3 +72,25 @@ release:
   draft: false
   prerelease: auto
   name_template: "v{{.Version}}"
+
+homebrew_casks:
+  - name: aver
+    repository:
+      owner: llimllib
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    commit_msg_template: "Brew cask update for {{ .ProjectName }} version {{ .Tag }}"
+    homepage: "https://github.com/llimllib/aver"
+    description: "A GitHub Actions version checker. Scans your GitHub actions workflow files and reports outdated versions."
+    url:
+      verified: "github.com/llimllib/aver"
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/aver"]
+          end
