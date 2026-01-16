@@ -4,6 +4,16 @@ A GitHub **A**ctions **ver**sion checker. Scans your GitHub actions workflow fil
 
 ## Installation
 
+### Homebrew (recommended)
+
+```bash
+brew install llimllib/tap/aver
+```
+
+### Alternatives
+
+`go install`
+
 ```bash
 go install aver/cmd/aver@latest
 ```
