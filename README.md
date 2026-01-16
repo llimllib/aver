@@ -20,11 +20,19 @@ Run `aver` in any directory within a Git repository:
 
 ```bash
 $ aver
+Outdated actions:
 File                        Action            Current  Latest
 --------------------------  ----------------  -------  ------
 .github/workflows/lint.yml  actions/checkout  v5       v6.0.2
 .github/workflows/lint.yml  actions/setup-go  v5       v6.2.0
+
+SHA-pinned actions behind default branch:
+File                        Action            Current SHA  Latest SHA  Branch  Behind
+--------------------------  ----------------  -----------  ----------  ------  ------
+.github/workflows/lint.yml  actions/checkout  a1b2c3d      e5f6g7h     main    12
 ```
+
+In terminals that support [OSC 8 hyperlinks](https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda), action names link to their GitHub repository, version numbers link to their release tags, and SHA values link to their commits.
 
 The tool will:
 
@@ -63,7 +71,7 @@ For example:
 - `actions/checkout@v6.0` would be outdated if `v6.1` exists
 - `actions/checkout@v6.0.0` would be outdated if `v6.0.1` exists
 
-SHA-pinned actions (e.g., `@a1b2c3d`) report how many commits behind the default branch they are, unless `--ignore-sha` is passed.
+SHA-pinned actions (e.g., `@a1b2c3d`) report how many commits behind the default branch they are, along with the latest SHA on that branch, unless `--ignore-sha` is passed.
 
 ## Using with AI Coding Agents
 
