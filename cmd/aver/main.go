@@ -57,12 +57,104 @@ Examples:
   aver --quiet        Run without progress indicator
   aver help           Show this help message`
 
-func printHelp() {
-	fmt.Println(usageText)
+func shortSHA(sha string) string {
+	if len(sha) > 7 {
+		return sha[:7]
+	}
+	return sha
 }
 
-func printVersion() {
-	fmt.Printf("aver version %s (commit: %s, built: %s)\n", version, commit, date)
+// hyperlink returns an OSC 8 hyperlink escape sequence
+func hyperlink(url, text string) string {
+	return fmt.Sprintf("\x1b]8;;%s\x1b\\%s\x1b]8;;\x1b\\", url, text)
+}
+
+// repoFromAction extracts owner/repo from an action name like "owner/repo/subdir"
+func repoFromAction(name string) string {
+	parts := strings.Split(name, "/")
+	if len(parts) >= 2 {
+		return parts[0] + "/" + parts[1]
+	}
+	return name
+}
+
+func githubRepoURL(name string) string {
+	return fmt.Sprintf("https://github.com/%s", repoFromAction(name))
+}
+
+func githubCommitURL(name, sha string) string {
+	return fmt.Sprintf("https://github.com/%s/commit/%s", repoFromAction(name), sha)
+}
+
+func githubTagURL(name, tag string) string {
+	return fmt.Sprintf("https://github.com/%s/releases/tag/%s", repoFromAction(name), tag)
+}
+
+func printSHATable(shaPinned []actions.SHAPinnedAction) {
+	if len(shaPinned) == 0 {
+		return
+	}
+
+	headers := []string{"File", "Action", "Current SHA", "Latest SHA", "Branch", "Behind"}
+
+	widths := make([]int, len(headers))
+	for i, h := range headers {
+		widths[i] = len(h)
+	}
+
+	for _, a := range shaPinned {
+		if len(a.File) > widths[0] {
+			widths[0] = len(a.File)
+		}
+		if len(a.Name) > widths[1] {
+			widths[1] = len(a.Name)
+		}
+		currentShort := shortSHA(a.CurrentSHA)
+		latestShort := shortSHA(a.LatestSHA)
+		if len(currentShort) > widths[2] {
+			widths[2] = len(currentShort)
+		}
+		if len(latestShort) > widths[3] {
+			widths[3] = len(latestShort)
+		}
+		if len(a.DefaultBranch) > widths[4] {
+			widths[4] = len(a.DefaultBranch)
+		}
+		behindStr := fmt.Sprintf("%d", a.CommitsBehind)
+		if len(behindStr) > widths[5] {
+			widths[5] = len(behindStr)
+		}
+	}
+
+	fmt.Printf("%-*s  %-*s  %-*s  %-*s  %-*s  %-*s\n",
+		widths[0], headers[0],
+		widths[1], headers[1],
+		widths[2], headers[2],
+		widths[3], headers[3],
+		widths[4], headers[4],
+		widths[5], headers[5])
+
+	fmt.Printf("%s  %s  %s  %s  %s  %s\n",
+		strings.Repeat("-", widths[0]),
+		strings.Repeat("-", widths[1]),
+		strings.Repeat("-", widths[2]),
+		strings.Repeat("-", widths[3]),
+		strings.Repeat("-", widths[4]),
+		strings.Repeat("-", widths[5]))
+
+	for _, a := range shaPinned {
+		actionLink := hyperlink(githubRepoURL(a.Name), fmt.Sprintf("%-*s", widths[1], a.Name))
+		currentLink := hyperlink(githubCommitURL(a.Name, a.CurrentSHA), fmt.Sprintf("%-*s", widths[2], shortSHA(a.CurrentSHA)))
+		latestLink := hyperlink(githubCommitURL(a.Name, a.LatestSHA), fmt.Sprintf("%-*s", widths[3], shortSHA(a.LatestSHA)))
+
+		fmt.Printf("%-*s  %s  %s  %s  %-*s  %-*d\n",
+			widths[0], a.File,
+			actionLink,
+			currentLink,
+			latestLink,
+			widths[4], a.DefaultBranch,
+			widths[5], a.CommitsBehind)
+	}
 }
 
 func printOutdatedTable(outdated []actions.OutdatedAction) {
@@ -70,10 +162,8 @@ func printOutdatedTable(outdated []actions.OutdatedAction) {
 		return
 	}
 
-	// Column headers
 	headers := []string{"File", "Action", "Current", "Latest"}
 
-	// Calculate column widths
 	widths := make([]int, len(headers))
 	for i, h := range headers {
 		widths[i] = len(h)
@@ -94,98 +184,29 @@ func printOutdatedTable(outdated []actions.OutdatedAction) {
 		}
 	}
 
-	// Print header
 	fmt.Printf("%-*s  %-*s  %-*s  %-*s\n",
 		widths[0], headers[0],
 		widths[1], headers[1],
 		widths[2], headers[2],
 		widths[3], headers[3])
 
-	// Print separator
 	fmt.Printf("%s  %s  %s  %s\n",
 		strings.Repeat("-", widths[0]),
 		strings.Repeat("-", widths[1]),
 		strings.Repeat("-", widths[2]),
 		strings.Repeat("-", widths[3]))
 
-	// Print rows
 	for _, a := range outdated {
-		fmt.Printf("%-*s  %-*s  %-*s  %-*s\n",
+		actionLink := hyperlink(githubRepoURL(a.Name), fmt.Sprintf("%-*s", widths[1], a.Name))
+		currentLink := hyperlink(githubTagURL(a.Name, a.CurrentVersion), fmt.Sprintf("%-*s", widths[2], a.CurrentVersion))
+		latestLink := hyperlink(githubTagURL(a.Name, a.LatestVersion), fmt.Sprintf("%-*s", widths[3], a.LatestVersion))
+
+		fmt.Printf("%-*s  %s  %s  %s\n",
 			widths[0], a.File,
-			widths[1], a.Name,
-			widths[2], a.CurrentVersion,
-			widths[3], a.LatestVersion)
+			actionLink,
+			currentLink,
+			latestLink)
 	}
-}
-
-func printSHATable(shaPinned []actions.SHAPinnedAction) {
-	if len(shaPinned) == 0 {
-		return
-	}
-
-	// Column headers
-	headers := []string{"File", "Action", "Current SHA", "Latest SHA", "Behind"}
-
-	// Calculate column widths
-	widths := make([]int, len(headers))
-	for i, h := range headers {
-		widths[i] = len(h)
-	}
-
-	for _, a := range shaPinned {
-		if len(a.File) > widths[0] {
-			widths[0] = len(a.File)
-		}
-		if len(a.Name) > widths[1] {
-			widths[1] = len(a.Name)
-		}
-		// Show short SHA (first 7 chars)
-		currentShort := shortSHA(a.CurrentSHA)
-		latestShort := shortSHA(a.LatestSHA)
-		if len(currentShort) > widths[2] {
-			widths[2] = len(currentShort)
-		}
-		if len(latestShort) > widths[3] {
-			widths[3] = len(latestShort)
-		}
-		behindStr := fmt.Sprintf("%d", a.CommitsBehind)
-		if len(behindStr) > widths[4] {
-			widths[4] = len(behindStr)
-		}
-	}
-
-	// Print header
-	fmt.Printf("%-*s  %-*s  %-*s  %-*s  %-*s\n",
-		widths[0], headers[0],
-		widths[1], headers[1],
-		widths[2], headers[2],
-		widths[3], headers[3],
-		widths[4], headers[4])
-
-	// Print separator
-	fmt.Printf("%s  %s  %s  %s  %s\n",
-		strings.Repeat("-", widths[0]),
-		strings.Repeat("-", widths[1]),
-		strings.Repeat("-", widths[2]),
-		strings.Repeat("-", widths[3]),
-		strings.Repeat("-", widths[4]))
-
-	// Print rows
-	for _, a := range shaPinned {
-		fmt.Printf("%-*s  %-*s  %-*s  %-*s  %-*d\n",
-			widths[0], a.File,
-			widths[1], a.Name,
-			widths[2], shortSHA(a.CurrentSHA),
-			widths[3], shortSHA(a.LatestSHA),
-			widths[4], a.CommitsBehind)
-	}
-}
-
-func shortSHA(sha string) string {
-	if len(sha) > 7 {
-		return sha[:7]
-	}
-	return sha
 }
 
 type jsonOutput struct {
@@ -212,16 +233,7 @@ func printJSON(result actions.CheckResult) error {
 	return nil
 }
 
-func hasFlag(args []string, flags ...string) bool {
-	for _, arg := range args {
-		for _, flag := range flags {
-			if arg == flag {
-				return true
-			}
-		}
-	}
-	return false
-}
+// Remaining spinner and other utility functions from the original implementation...
 
 // spinner displays a spinning progress indicator
 type spinner struct {
@@ -277,6 +289,25 @@ func (s *spinner) update(action string) {
 func (s *spinner) finish() {
 	close(s.stop)
 	<-s.stopped
+}
+
+func printHelp() {
+	fmt.Println(usageText)
+}
+
+func printVersion() {
+	fmt.Printf("aver version %s (commit: %s, built: %s)\n", version, commit, date)
+}
+
+func hasFlag(args []string, flags ...string) bool {
+	for _, arg := range args {
+		for _, flag := range flags {
+			if arg == flag {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // isTerminal returns true if the file is a terminal

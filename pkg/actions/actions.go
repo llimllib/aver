@@ -34,6 +34,7 @@ type SHAPinnedAction struct {
 	CurrentSHA    string `json:"current_sha"`
 	LatestSHA     string `json:"latest_sha"`
 	CommitsBehind int    `json:"commits_behind"`
+	DefaultBranch string `json:"default_branch"`  // Added to show the branch the latest SHA is from
 }
 
 // GitHubTag represents a tag from the GitHub API
@@ -264,6 +265,7 @@ func CheckActionVersions(actions []ActionReference, opts CheckOptions) (bool, Ch
 					CurrentSHA:    action.Version,
 					LatestSHA:     shaInfo.LatestSHA,
 					CommitsBehind: shaInfo.CommitsBehind,
+					DefaultBranch: shaInfo.DefaultBranch,
 				})
 			}
 			continue
@@ -455,12 +457,13 @@ func isSHA(version string) bool {
 	return true
 }
 
+// checkSHAStatus checks how far behind a SHA-pinned action is from the default branch
 type shaStatus struct {
 	LatestSHA     string
 	CommitsBehind int
+	DefaultBranch string
 }
 
-// checkSHAStatus checks how far behind a SHA-pinned action is from the default branch
 func checkSHAStatus(repo, sha string) (*shaStatus, error) {
 	// First, get the default branch
 	defaultBranch, err := getDefaultBranch(repo)
@@ -476,7 +479,11 @@ func checkSHAStatus(repo, sha string) (*shaStatus, error) {
 
 	// If already at latest, no need to compare
 	if strings.HasPrefix(latestSHA, sha) || strings.HasPrefix(sha, latestSHA) {
-		return &shaStatus{LatestSHA: latestSHA, CommitsBehind: 0}, nil
+		return &shaStatus{
+			LatestSHA: latestSHA, 
+			CommitsBehind: 0, 
+			DefaultBranch: defaultBranch,
+		}, nil
 	}
 
 	// Compare the commits
@@ -485,7 +492,11 @@ func checkSHAStatus(repo, sha string) (*shaStatus, error) {
 		return nil, err
 	}
 
-	return &shaStatus{LatestSHA: latestSHA, CommitsBehind: behindBy}, nil
+	return &shaStatus{
+		LatestSHA: latestSHA, 
+		CommitsBehind: behindBy, 
+		DefaultBranch: defaultBranch,
+	}, nil
 }
 
 func getDefaultBranch(repo string) (string, error) {
