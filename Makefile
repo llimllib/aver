@@ -1,4 +1,4 @@
-.PHONY: lint test install clean release
+.PHONY: lint test install clean release site
 
 GO ?= go
 GOLANGCI_LINT = golangci-lint
@@ -27,6 +27,9 @@ clean:
 
 release:
 	@./scripts/release.sh
+
+site:
+	@./scripts/build-site.sh
 
 # Default target
 all: $(BINARY)
