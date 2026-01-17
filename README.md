@@ -2,6 +2,8 @@
 
 A GitHub **A**ctions **ver**sion checker. Scans your GitHub actions workflow files and reports outdated versions.
 
+![](docs/readme.png)
+
 ## Installation
 
 ### Homebrew (recommended)
@@ -135,6 +137,7 @@ make test     # Run tests
 make lint     # Run golangci-lint
 make clean    # Remove binary
 make release  # Make a release
+make site     # Build the documentation site
 ```
 
 ## License

@@ -68,3 +68,13 @@ The `skill/github-actions-version-check/` directory contains a skill for AI codi
 ## Commits
 
 Use conventional commit style: `feat:`, `fix:`, `docs:`, `refactor:`, etc.
+
+## Pull Requests
+
+Before submitting a PR, export the session transcript using the pr-transcript skill:
+
+```bash
+./.pi/skills/pr-transcript/export-transcript.sh <pr-number> <description>
+```
+
+This saves the AI coding session to `transcripts/` for documentation.
