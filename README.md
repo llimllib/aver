@@ -103,9 +103,22 @@ When creating or modifying `.github/workflows/` files:
 3. If aver reports outdated actions, update them to the versions shown
 ```
 
-### Option 2: Install the Skill
+### Option 2: Install the Plugin (Claude Code)
 
-For [Pi](https://github.com/badlogic/pi-coding-agent) or [Claude Code](https://claude.ai/code), install the included skill for automatic version checking guidance:
+For [Claude Code](https://claude.ai/code), install the plugin from this repository's marketplace:
+
+```shell
+/plugin marketplace add llimllib/aver
+/plugin install github-actions-version-check@aver
+```
+
+The plugin includes:
+- A skill that automatically activates when working with GitHub Actions workflow files
+- A hook that checks for `GITHUB_TOKEN` before running aver commands
+
+### Option 3: Install the Skill Manually
+
+For [Pi](https://github.com/badlogic/pi-coding-agent) or [Claude Code](https://claude.ai/code), you can also install the skill manually:
 
 ```bash
 # For Pi
@@ -116,8 +129,6 @@ cp -r skill/github-actions-version-check ~/.claude/skills/
 ```
 
 The agent will automatically load the skill when working with GitHub Actions workflow files.
-
-**I have not actually used this**, please let me know how it works for you and if there are any changes you'd like to make.
 
 ## GitHub API Rate Limits
 
