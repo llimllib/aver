@@ -1,0 +1,23 @@
+{
+  "name": "aver",
+  "owner": {
+    "name": "llimllib"
+  },
+  "metadata": {
+    "description": "GitHub Actions version checking tools for Claude Code"
+  },
+  "plugins": [
+    {
+      "name": "github-actions-version-check",
+      "source": "./plugin/github-actions-version-check",
+      "description": "Check and update GitHub Actions versions using aver",
+      "version": "1.0.0",
+      "author": {
+        "name": "llimllib"
+      },
+      "repository": "https://github.com/llimllib/aver",
+      "license": "MIT",
+      "keywords": ["github-actions", "ci-cd", "version-check", "aver"]
+    }
+  ]
+}
